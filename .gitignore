@@ -23,3 +23,8 @@ build/
 # secrets never go to git
 secrets/
 render-urls.json
+
+# local test state and logs
+.local-state.json
+.local-pids.json
+logs/

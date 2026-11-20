@@ -1,0 +1,12 @@
+# Everything needed to run the 15 services in one local process (scripts/local_e2e.py) and the full test suite.
+# Install:  .\.venv\Scripts\python.exe -m pip install -e shared[test] -r requirements-local.txt
+fastapi>=0.110,<1
+uvicorn>=0.29,<1
+python-multipart>=0.0.9
+boto3>=1.35,<2
+pypdf>=4,<7
+python-docx>=1.1,<2
+openpyxl>=3.1,<4
+Pillow>=10,<13
+reportlab>=4,<5
+pyyaml>=6

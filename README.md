@@ -29,6 +29,15 @@ Design: [`docs/phase0-architecture.md`](docs/phase0-architecture.md)
 
 Unit tests use `moto` mocks and never touch real AWS.
 
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-local.txt
+.\.venv\Scripts\python.exe -m pytest tests -q --import-mode=importlib       # all mocked tests
+.\.venv\Scripts\python.exe scripts\local_e2e.py                            # whole pipeline on YOUR machine against REAL AWS
+```
+Want to run all services on one local port (8001) and test stage by stage with curl? See [`docs/local-testing.md`](docs/local-testing.md).
+
+`local_e2e.py` calls the 15 service apps in-process in workflow order (no Render, no Step Functions) and prints the reconciliation report.
+
 ## Layout
 
 `shared/` (versioned foundation package) · `services/` · `workers/` · `orchestration/` ·

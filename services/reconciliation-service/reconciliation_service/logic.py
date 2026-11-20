@@ -346,6 +346,11 @@ def _make_run(deps: StageDeps, params: Params) -> Run:
         raise classify_exception(exc) from exc
 
 
+def _archive_children(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Children accepted by archive-service. The file it writes keeps them under summary.children."""
+    return (manifest.get("summary") or {}).get("children") or manifest.get("children") or []
+
+
 def _ingestion_checks(run: Run, ing: dict[str, Any], members: list[dict[str, Any]], docs: dict[str, dict[str, Any]]) -> list[Finding]:
     out, ids = [], {m["document_id"] for m in members}
     for m in (m for m in members if m.get("role") == "ARCHIVE"):
@@ -353,7 +358,7 @@ def _ingestion_checks(run: Run, ing: dict[str, Any], members: list[dict[str, Any
         if raw is None:
             out.append(Finding(f"archive_manifest:{m['document_id']}", False, "required", "archive manifest is missing"))
             continue
-        children = [c["document_id"] for c in json.loads(raw)["data"].get("children", [])]
+        children = [c["document_id"] for c in _archive_children(json.loads(raw))]
         lost = [c for c in children if c not in ids or c not in docs]
         out.append(Finding(f"archive_children:{m['document_id']}", not lost, "required",
                            f"{len(lost)} of {len(children)} extracted files are not tracked in this ingestion" if lost

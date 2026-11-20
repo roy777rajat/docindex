@@ -175,8 +175,9 @@ def validate_content(f: BinaryIO, *, filename: str, declared_mime: str | None, s
         details = check_ooxml(f, settings)
     elif kind == "zip":
         details = check_zip(f, settings)
-    elif kind == "ole2":
-        details = {}  # legacy Office: signature verified; deep parsing happens in extraction
+    elif kind == "ole2":  # legacy Office (.doc/.xls): signature is valid but no parser exists, so reject now rather than fail later
+        raise UnsupportedFormat("legacy Office files (.doc/.xls) are not supported; save as .docx or .xlsx",
+                                code="LEGACY_OFFICE_UNSUPPORTED")
     elif ext == "json":
         details = check_json(f, size)
     elif ext == "xml":

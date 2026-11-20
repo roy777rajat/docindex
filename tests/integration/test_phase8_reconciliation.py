@@ -298,7 +298,8 @@ def test_archive_children_must_all_be_accounted_for(env):
     trail(env, "archive-service", "zip1")
     env["aws"]["s3"].put_object(
         Bucket=env["aws"]["bucket"], Key=processed_key("zip1", "manifests", "archive_manifest.json"),
-        Body=json.dumps({"data": {"children": [{"document_id": "c1"}, {"document_id": "ghost"}]}}).encode())
+        Body=json.dumps({"parent_document_id": "zip1", "entries": [],   # the shape archive-service really writes
+                         "summary": {"children": [{"document_id": "c1"}, {"document_id": "ghost"}]}}).encode())
     index(env)
     res = reconcile(env)
     f, c1 = checks(env, "c1")

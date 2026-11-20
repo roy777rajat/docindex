@@ -1,0 +1,17 @@
+{
+  "upload": 8001,
+  "validation": 8002,
+  "archive": 8003,
+  "manifest": 8004,
+  "normalization": 8005,
+  "cleaning": 8006,
+  "duplicate": 8007,
+  "extraction": 8008,
+  "metadata": 8009,
+  "chunking": 8010,
+  "embedding": 8011,
+  "vector-indexing": 8012,
+  "reconciliation": 8013,
+  "entity-extraction": 8014,
+  "graph": 8015
+}

@@ -20,6 +20,11 @@ def out_key(document_id: str) -> str:
     return stage_key(document_id, "normalized", "normalized.json")
 
 
+# file kinds validation-service can record (text files carry their extension), see tests/integration/test_kind_contract.py
+TEXT_KINDS = {"text", "txt", "csv", "json", "xml"}
+SUPPORTED_KINDS = {"pdf", "docx", "xlsx", "jpeg", "png", "tiff"} | TEXT_KINDS
+
+
 def run(deps: StageDeps, req: ProcessRequest) -> ProcessResponse:
     doc, ctx = load_document(deps, req.context)
     if doc.get("is_archive"):
@@ -49,7 +54,7 @@ def run(deps: StageDeps, req: ProcessRequest) -> ProcessResponse:
                     pages, info = parsers.parse_docx(tmp)
                 elif kind == "xlsx":
                     pages, info = parsers.parse_xlsx(tmp)
-                elif kind == "text":
+                elif kind in TEXT_KINDS:
                     pages, info = parsers.parse_text(tmp, doc.get("extension", ""))
                 elif kind in ("jpeg", "png", "tiff"):
                     pages, info = parsers.parse_image(tmp, kind, max_pages)
