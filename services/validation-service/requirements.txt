@@ -1,0 +1,6 @@
+fastapi>=0.110,<1
+uvicorn>=0.29,<1
+boto3>=1.35,<2
+pypdf>=4.2,<6
+Pillow>=10.3,<12
+defusedxml>=0.7.1,<0.8

@@ -1,0 +1,25 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.aws-sam/
+samconfig.toml
+node_modules/
+dist/
+build/
+*.log
+.vscode/
+.idea/
+
+# generated per environment (contain your service URLs) and build output
+infrastructure/generated/
+build/
+
+# secrets never go to git
+secrets/
+render-urls.json

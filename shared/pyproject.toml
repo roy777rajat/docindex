@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cleandocs-shared"
+version = "0.1.0"
+description = "CleanDocs AI shared foundation: config, logging, models, errors, audit, auth, AWS clients."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110,<1",
+    "pydantic>=2.6,<3",
+    "pydantic-settings>=2.2,<3",
+    "boto3>=1.34,<2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8,<9",
+    "httpx>=0.27,<1",
+    "moto[dynamodb,s3,sqs]>=5,<6",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cleandocs_shared*"]
+
+[tool.pytest.ini_options]
+testpaths = ["../tests/unit"]

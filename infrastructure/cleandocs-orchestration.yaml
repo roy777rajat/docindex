@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CleanDocs AI orchestration (Phase 7) - dispatcher Lambda, gate schedule, ingestion and file Step Functions, DLQ wiring.
+
+# Resource names of the core stack are fixed, so they are rebuilt here instead of imported.
+Parameters:
+  ProjectTag: { Type: String, Default: cleandocs }
+  ServiceAuthSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    Description: Bearer secret shared by Step Functions and the Render services (SERVICE_AUTH_SECRET).
+  DefinitionBucket: { Type: String, Description: Bucket holding the uploaded code and workflow definitions. }
+  DispatcherCodeKey: { Type: String, Description: "S3 key of the dispatcher zip, e.g. deploy/dispatcher-<hash>.zip" }
+  IngestionDefinitionKey: { Type: String }
+  FileDefinitionKey: { Type: String }
+  DuplicatePolicy: { Type: String, Default: SKIP, AllowedValues: [SKIP, LINK, REPROCESS] }
+  LeaseSeconds: { Type: Number, Default: 3600 }
+  DispatcherScheduleExpression: { Type: String, Default: "rate(5 minutes)", Description: Safety-net schedule; workflows also invoke the dispatcher directly. }
+  LogRetentionDays: { Type: Number, Default: 14 }
+  DispatcherReservedConcurrency:
+    Type: Number
+    Default: 0
+    Description: 0 = none. This account's Lambda limit is 10 so a reservation is not allowed; the DynamoDB gate already enforces single-flight.
+
+Conditions:
+  ReserveConcurrency: !Not [!Equals [!Ref DispatcherReservedConcurrency, 0]]
+
+Resources:
+  # ---------------- service-to-service auth for Step Functions HTTP Tasks ----------------
+  ServiceConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      Name: cleandocs-services
+      Description: Bearer API key sent by Step Functions to the Render services
+      AuthorizationType: API_KEY
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: Authorization
+          ApiKeyValue: !Sub "Bearer ${ServiceAuthSecret}"
+
+  # ---------------- logs (short retention) ----------------
+  DispatcherLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cleandocs-dispatcher
+      RetentionInDays: !Ref LogRetentionDays
+  IngestionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/vendedlogs/states/cleandocs-ingestion
+      RetentionInDays: !Ref LogRetentionDays
+  FileLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/vendedlogs/states/cleandocs-file
+      RetentionInDays: !Ref LogRetentionDays
+
+  # ---------------- dispatcher ----------------
+  DispatcherRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cleandocs-dispatcher-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: "sts:AssumeRole" }
+      Policies:
+        - PolicyName: dispatcher
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub ${DispatcherLogGroup.Arn}:*
+              - Effect: Allow
+                Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:ChangeMessageVisibility, sqs:GetQueueAttributes]
+                Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:cleandocs-file-queue
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cleandocs-registry
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:cleandocs-file
+              - Effect: Allow
+                Action: states:DescribeExecution
+                Resource: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:cleandocs-file:*
+
+  DispatcherFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: DispatcherLogGroup
+    Properties:
+      FunctionName: cleandocs-dispatcher
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !GetAtt DispatcherRole.Arn
+      Timeout: 30
+      MemorySize: 128
+      ReservedConcurrentExecutions: !If [ReserveConcurrency, !Ref DispatcherReservedConcurrency, !Ref "AWS::NoValue"]
+      Code: { S3Bucket: !Ref DefinitionBucket, S3Key: !Ref DispatcherCodeKey }
+      Environment:
+        Variables:
+          REGISTRY_TABLE: cleandocs-registry
+          QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/cleandocs-file-queue
+          STATE_MACHINE_ARN: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:cleandocs-file
+          LEASE_SECONDS: !Ref LeaseSeconds
+      Tags: [{ Key: project, Value: !Ref ProjectTag }]
+
+  DispatcherSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cleandocs-dispatcher-schedule
+      ScheduleExpression: !Ref DispatcherScheduleExpression
+      State: ENABLED
+      Targets:
+        - { Id: dispatcher, Arn: !GetAtt DispatcherFunction.Arn }
+  DispatcherSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DispatcherFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DispatcherSchedule.Arn
+
+  # ---------------- Step Functions ----------------
+  WorkflowRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cleandocs-workflow-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: states.amazonaws.com }, Action: "sts:AssumeRole" }
+      Policies:
+        - PolicyName: workflows
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: states:InvokeHTTPEndpoint
+                Resource:
+                  - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:cleandocs-ingestion
+                  - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:cleandocs-file
+              - Effect: Allow
+                Action: events:RetrieveConnectionCredentials
+                Resource: !GetAtt ServiceConnection.Arn
+              - Effect: Allow
+                Action: [secretsmanager:GetSecretValue, secretsmanager:DescribeSecret]
+                Resource: !GetAtt ServiceConnection.SecretArn
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/cleandocs-registry
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource:
+                  - !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:cleandocs-file-queue
+                  - !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:cleandocs-file-dlq
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt DispatcherFunction.Arn
+              - Effect: Allow   # CloudWatch Logs delivery for state machine logging
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: "*"
+
+  FileStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: cleandocs-file
+      StateMachineType: STANDARD
+      RoleArn: !GetAtt WorkflowRole.Arn
+      DefinitionS3Location: { Bucket: !Ref DefinitionBucket, Key: !Ref FileDefinitionKey }
+      DefinitionSubstitutions:
+        ConnectionArn: !GetAtt ServiceConnection.Arn
+        DispatcherArn: !GetAtt DispatcherFunction.Arn
+        RegistryTable: cleandocs-registry
+        DlqUrl: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/cleandocs-file-dlq
+        DuplicatePolicy: !Ref DuplicatePolicy
+      LoggingConfiguration:
+        Level: ERROR
+        IncludeExecutionData: false
+        Destinations:
+          - CloudWatchLogsLogGroup: { LogGroupArn: !GetAtt FileLogGroup.Arn }
+      Tags: [{ Key: project, Value: !Ref ProjectTag }]
+
+  IngestionStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: cleandocs-ingestion
+      StateMachineType: STANDARD
+      RoleArn: !GetAtt WorkflowRole.Arn
+      DefinitionS3Location: { Bucket: !Ref DefinitionBucket, Key: !Ref IngestionDefinitionKey }
+      DefinitionSubstitutions:
+        ConnectionArn: !GetAtt ServiceConnection.Arn
+        DispatcherArn: !GetAtt DispatcherFunction.Arn
+        QueueUrl: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/cleandocs-file-queue
+      LoggingConfiguration:
+        Level: ERROR
+        IncludeExecutionData: false
+        Destinations:
+          - CloudWatchLogsLogGroup: { LogGroupArn: !GetAtt IngestionLogGroup.Arn }
+      Tags: [{ Key: project, Value: !Ref ProjectTag }]
+
+Outputs:
+  IngestionStateMachineArn: { Value: !Ref IngestionStateMachine }
+  FileStateMachineArn: { Value: !Ref FileStateMachine }
+  DispatcherArn: { Value: !GetAtt DispatcherFunction.Arn }
+  ConnectionArn: { Value: !GetAtt ServiceConnection.Arn }

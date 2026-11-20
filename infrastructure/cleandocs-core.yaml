@@ -1,0 +1,356 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CleanDocs AI core infrastructure (Phase 2) - storage, queues, tables, S3 Vectors, Bedrock KB, tiered IAM.
+
+Parameters:
+  ProjectTag:
+    Type: String
+    Default: cleandocs
+  AdminPrincipalArn:
+    Type: String
+    Default: arn:aws:iam::141571819444:user/rajat-full-access
+    Description: Only this principal may delete objects under raw/ (originals are immutable for services).
+  EmbeddingModelId:
+    Type: String
+    Default: amazon.titan-embed-text-v2:0
+  EmbeddingDimension:
+    Type: Number
+    Default: 1024
+
+Resources:
+  # ---------------- S3 ----------------
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub cleandocs-${AWS::AccountId}-${AWS::Region}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-tmp
+            Status: Enabled
+            Prefix: tmp/
+            ExpirationInDays: 1
+          - Id: abort-incomplete-multipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: expire-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - { Key: project, Value: !Ref ProjectTag }
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt Bucket.Arn
+              - !Sub ${Bucket.Arn}/*
+            Condition:
+              Bool: { "aws:SecureTransport": "false" }
+          - Sid: RawOriginalsAreImmutableExceptAdmin
+            Effect: Deny
+            Principal: "*"
+            Action: ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+            Resource: !Sub ${Bucket.Arn}/raw/*
+            Condition:
+              StringNotEquals: { "aws:PrincipalArn": !Ref AdminPrincipalArn }
+
+  # ---------------- SQS ----------------
+  FileDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cleandocs-file-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - { Key: project, Value: !Ref ProjectTag }
+
+  FileQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cleandocs-file-queue
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FileDlq.Arn
+        maxReceiveCount: 5
+      Tags:
+        - { Key: project, Value: !Ref ProjectTag }
+
+  # ---------------- DynamoDB (on-demand, no GSIs) ----------------
+  RegistryTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: cleandocs-registry
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      Tags:
+        - { Key: project, Value: !Ref ProjectTag }
+
+  TrailTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: document-ingest-trail
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      Tags:
+        - { Key: project, Value: !Ref ProjectTag }
+
+  # ---------------- S3 Vectors ----------------
+  VectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    Properties:
+      VectorBucketName: !Sub cleandocs-vectors-${AWS::AccountId}
+
+  VectorIndex:
+    Type: AWS::S3Vectors::Index
+    DependsOn: VectorBucket
+    Properties:
+      VectorBucketName: !Sub cleandocs-vectors-${AWS::AccountId}
+      IndexName: cleandocs-index
+      DataType: float32
+      Dimension: !Ref EmbeddingDimension
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        NonFilterableMetadataKeys:
+          - AMAZON_BEDROCK_TEXT
+          - AMAZON_BEDROCK_METADATA
+
+  # ---------------- Bedrock Knowledge Base ----------------
+  KnowledgeBaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cleandocs-kb-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: bedrock.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: { "aws:SourceAccount": !Ref "AWS::AccountId" }
+      Policies:
+        - PolicyName: kb-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/${EmbeddingModelId}
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+                Condition:
+                  StringLike: { "s3:prefix": ["kb-source/*"] }
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${Bucket.Arn}/kb-source/*
+              - Effect: Allow
+                Action:
+                  - s3vectors:GetIndex
+                  - s3vectors:QueryVectors
+                  - s3vectors:PutVectors
+                  - s3vectors:GetVectors
+                  - s3vectors:DeleteVectors
+                  - s3vectors:ListVectors
+                Resource: !GetAtt VectorIndex.IndexArn
+
+  KnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: cleandocs-kb
+      Description: CleanDocs AI document index (chunks pre-built by chunking-service)
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/${EmbeddingModelId}
+      StorageConfiguration:
+        Type: S3_VECTORS
+        S3VectorsConfiguration:
+          IndexArn: !GetAtt VectorIndex.IndexArn
+      Tags:
+        project: !Ref ProjectTag
+
+  KnowledgeBaseDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      KnowledgeBaseId: !Ref KnowledgeBase
+      Name: cleandocs-kb-source
+      DataDeletionPolicy: DELETE
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt Bucket.Arn
+          InclusionPrefixes: ["kb-source/"]
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: NONE
+
+  # ---------------- IAM: three least-privilege tiers for Render services ----------------
+  # Users are created here; ACCESS KEYS ARE NOT (they would land in stack state). Create them with
+  # `aws iam create-access-key` when deploying to Render and store them only as Render secrets.
+  IngestUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: cleandocs-ingest
+      Tags: [{ Key: project, Value: !Ref ProjectTag }]
+      Policies:
+        - PolicyName: ingest-tier
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub ${Bucket.Arn}/raw/*
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub ${Bucket.Arn}/processed/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+                Resource: !GetAtt RegistryTable.Arn
+              - Effect: Allow
+                Action: [dynamodb:PutItem, dynamodb:Query]
+                Resource: !GetAtt TrailTable.Arn
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:cleandocs-*
+              - Effect: Allow
+                Action: [states:SendTaskSuccess, states:SendTaskFailure, states:SendTaskHeartbeat]
+                Resource: "*"
+
+  ProcessingUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: cleandocs-processing
+      Tags: [{ Key: project, Value: !Ref ProjectTag }]
+      Policies:
+        - PolicyName: processing-tier
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${Bucket.Arn}/raw/*
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource:
+                  - !Sub ${Bucket.Arn}/processed/*
+                  - !Sub ${Bucket.Arn}/kb-source/*
+                  - !Sub ${Bucket.Arn}/tmp/*
+              - Effect: Allow
+                Action: s3:DeleteObject   # embedding-service removes stale chunk objects of a re-processed document
+                Resource: !Sub ${Bucket.Arn}/kb-source/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+                Resource: !GetAtt RegistryTable.Arn
+              - Effect: Allow
+                Action: [dynamodb:PutItem, dynamodb:Query]
+                Resource: !GetAtt TrailTable.Arn
+              - Effect: Allow
+                Action:
+                  - textract:DetectDocumentText
+                  - textract:AnalyzeDocument
+                  - textract:StartDocumentTextDetection
+                  - textract:GetDocumentTextDetection
+                  - textract:StartDocumentAnalysis
+                  - textract:GetDocumentAnalysis
+                Resource: "*"
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/*
+              - Effect: Allow
+                Action: [states:SendTaskSuccess, states:SendTaskFailure, states:SendTaskHeartbeat]
+                Resource: "*"
+
+  IndexingUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: cleandocs-indexing
+      Tags: [{ Key: project, Value: !Ref ProjectTag }]
+      Policies:
+        - PolicyName: indexing-tier
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub ${Bucket.Arn}/kb-source/*
+              - Effect: Allow
+                Action: [s3:GetObject]
+                Resource:
+                  - !Sub ${Bucket.Arn}/raw/*
+                  - !Sub ${Bucket.Arn}/processed/*
+              - Effect: Allow
+                Action: s3:PutObject   # reconciliation-service writes the ingestion report
+                Resource: !Sub ${Bucket.Arn}/processed/ingestions/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Bucket.Arn
+              - Effect: Allow
+                Action: [bedrock:StartIngestionJob, bedrock:GetIngestionJob, bedrock:ListIngestionJobs, bedrock:GetKnowledgeBase, bedrock:GetDataSource, bedrock:ListKnowledgeBaseDocuments, bedrock:GetKnowledgeBaseDocuments]
+                Resource: !GetAtt KnowledgeBase.KnowledgeBaseArn
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+                Resource: !GetAtt RegistryTable.Arn
+              - Effect: Allow
+                Action: [dynamodb:PutItem, dynamodb:Query]
+                Resource: !GetAtt TrailTable.Arn
+              - Effect: Allow
+                Action: [states:SendTaskSuccess, states:SendTaskFailure, states:SendTaskHeartbeat]
+                Resource: "*"
+
+Outputs:
+  BucketName: { Value: !Ref Bucket }
+  FileQueueUrl: { Value: !Ref FileQueue }
+  FileDlqUrl: { Value: !Ref FileDlq }
+  RegistryTableName: { Value: !Ref RegistryTable }
+  TrailTableName: { Value: !Ref TrailTable }
+  VectorBucketArn: { Value: !GetAtt VectorBucket.VectorBucketArn }
+  VectorIndexArn: { Value: !GetAtt VectorIndex.IndexArn }
+  KnowledgeBaseId: { Value: !Ref KnowledgeBase }
+  DataSourceId: { Value: !GetAtt KnowledgeBaseDataSource.DataSourceId }
