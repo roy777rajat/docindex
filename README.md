@@ -153,11 +153,11 @@ docindex/
 
 ## 7. Architecture diagram
 
-> _Placeholder: the architecture diagram will be added here._
->
-> `
-<img src="docs/assets/cleandocs-banner.svg" alt="CleanDocs AI: documents and ZIP files land, are extracted, cleaned, enriched, chunked and indexed" width="100%"/>`
+<div align="center">
 
+<img src="docs/assets/architecture.svg" alt="CleanDocs AI: documents and ZIP files land, are extracted, cleaned, enriched, chunked and indexed" width="100%"/>
+
+</div>
 ---
 
 ## Status
