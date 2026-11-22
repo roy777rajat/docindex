@@ -24,14 +24,14 @@ Full index with reference documents: [`docs/README.md`](docs/README.md). Coming 
 
 ## 1. What it is, the problem, and how it is solved
 
-**The problem.** Personal and business documents arrive in every shape: digital PDFs, phone scans, Word and Excel files, ZIP bundles of all of them.
+**The problem.** It support .doc,.docx,.jpeg,.tig,.xls,.xlsx,.txt,.csv,.pptx.
 To search them with AI you must turn them into clean, trustworthy text, remember where every sentence came from, know who may see it, avoid
 indexing the same file twice, and be able to prove afterwards that everything really got indexed. Doing that with one big script is fragile:
 one bad file stops the batch, nothing tells you what happened, and every change risks the whole thing.
 
 **The solution: CleanDocs AI** takes any supported file (or a ZIP of files), runs it through a pipeline of small, single-purpose services, and
 publishes **citation-ready chunks with rich metadata** into an Amazon Bedrock Knowledge Base. Ingestion and indexing only; the chat/search API
-(`query-api`) comes next and is designed for.
+(`query`) comes next and is designed for.
 
 | Principle | What it means here |
 |---|---|
