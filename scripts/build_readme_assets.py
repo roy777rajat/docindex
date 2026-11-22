@@ -1,5 +1,5 @@
 """Generate the animated README banner and the technology-stack image (pure SVG, no external files).
-   python scripts/build_readme_assets.py     -> docs/assets/banner.svg, docs/assets/tech-stack.svg"""
+   python scripts/build_readme_assets.py     -> docs/assets/cleandocs-banner.svg, docs/assets/tech-stack.svg"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -70,7 +70,7 @@ SVC_NAMES = ["upload-service", "duplicate-service (+ SHA-256 in upload)", "valid
              "chunking-service", "embedding-service", "vector-indexing-service (+ reconciliation)"]
 N = len(STAGES)
 BX0, BSTEP, BY, BW, BH, LANE = 495, 85, 170, 70, 62, 112
-T = 111.0
+T = 122.0
 
 
 def sx(i: int) -> float:
@@ -146,13 +146,13 @@ def banner() -> str:
     # ---- schedule (seconds)
     step_s, dw_s = 5.0, 4.4
     a_s = [1.0 + step_s * i for i in range(N)]                       # single file arrivals
-    Z0, zstep, zdw = 58.0, 3.0, 2.4
+    Z0, zstep, zdw = 58.0, 4.0, 3.4
     a_z = [Z0 + zstep * i for i in range(4)]                        # zip: upload, checksum, validate, archive
     open_t = a_z[3] + 1.5
     dep = [open_t + 3.0 + 0.5 * j for j in range(3)]                # children leave the archive box
-    cstep, cdw = 4.0, 3.5
+    cstep, cdw = 5.0, 4.4
     a_c = [dep[0] + 0.5 + cstep * (i - 4) for i in range(4, N)]    # lead child arrivals at stage 4..10
-    D0 = 101.8
+    D0 = 112.5
 
     # ---- connectors and boxes
     for i in range(N - 1):
@@ -253,7 +253,7 @@ def banner() -> str:
             f'<animateMotion dur="{T}s" repeatCount="indefinite" path="M {fx},{LANE} L {fx},{BY + BH / 2 + 67}" keyPoints="0;0;1;1" '
             f'keyTimes="0;{nk(D0 + 1.2)};{nk(D0 + 3.4)};1" calcMode="linear"/>'
             f'<animate attributeName="opacity" dur="{T}s" repeatCount="indefinite" values="0;0;1;1;0;0" '
-            f'keyTimes="0;{nk(D0 + 0.6)};{nk(D0 + 0.9)};{nk(D0 + 8.0)};{nk(D0 + 8.5)};1"/></g>')
+            f'keyTimes="0;{nk(D0 + 0.6)};{nk(D0 + 0.9)};{nk(D0 + 4.2)};{nk(D0 + 4.8)};1"/></g>')
     o.append(drop)
     o.append(f'<text x="920" y="500" text-anchor="middle" font-size="12.5" fill="#a5b4fc" {FONT}>Microservices on Render  ·  AWS Step Functions + SQS orchestration  ·  Bedrock Knowledge Base on S3 Vectors</text>')
     o.append('</svg>')
@@ -292,6 +292,6 @@ def tech() -> str:
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "banner.svg").write_text(banner(), encoding="utf-8")
+    (OUT / "cleandocs-banner.svg").write_text(banner(), encoding="utf-8")
     (OUT / "tech-stack.svg").write_text(tech(), encoding="utf-8")
-    print("wrote", OUT / "banner.svg", OUT / "tech-stack.svg")
+    print("wrote", OUT / "cleandocs-banner.svg", OUT / "tech-stack.svg")
