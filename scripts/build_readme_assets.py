@@ -26,19 +26,89 @@ def traveller(icon: str, path: str, a: float, b: float) -> str:
             f'values="0;0;1;1;0;0" keyTimes="0;{a};{min(a + 0.03, b)};{max(b - 0.03, a + 0.03)};{b};1"/></g>')
 
 
+# ------------------------------------------------------------------ banner
+STAGES = [  # title, caption, colour, panel lines (single file)
+    ("Upload", "S3 original", "#38bdf8", ["Upload service stores the untouched original in S3",
+        "Owner and Idempotency-Key are recorded, so a retry is safe",
+        "Starts the Step Functions ingestion workflow"]),
+    ("Checksum", "SHA-256", "#2dd4bf", ["SHA-256 is computed and verified by S3 on write",
+        "Exact duplicates are detected: skip, link or reprocess",
+        "The original is immutable: written once, never overwritten"]),
+    ("Validate", "magic bytes", "#84cc16", ["File type is read from the content (magic bytes), not the extension",
+        "Size, page and image-pixel limits are enforced",
+        "Bad files are rejected early and safely"]),
+    ("Archive", "unzip safely", "#a855f7", ["Not a ZIP, so the file passes straight through",
+        "ZIPs only: zip-bomb and path checks, each entry becomes its own document",
+        "Children inherit the owner of the upload"]),
+    ("SQS", "work queue", "#fb923c", ["The file waits in the SQS queue",
+        "A dispatcher feeds one file at a time through the DynamoDB gate",
+        "Failed steps retry, then the message moves to the DLQ"]),
+    ("Normalize", "clean JSON", "#60a5fa", ["PDF, Word, Excel, CSV and images become uniform page/block JSON",
+        "Cleaning fixes whitespace, hyphenation and control characters",
+        "Pages that need OCR are marked"]),
+    ("Extract", "OCR + text", "#f59e0b", ["Real text is kept; scanned pages go to Amazon Textract (OCR)",
+        "OCR confidence is stored; a monthly page cap bounds the spend",
+        "Rule-based title, type guess, dates and keywords are added"]),
+    ("Enrich", "LLM labels", "#ec4899", ["One Nova Micro call returns type, tags, summary, language, date, PII flag",
+        "The answer is validated against a closed vocabulary (injection-safe)",
+        "Soft stage: it can never fail a document"]),
+    ("Chunk", "layout-aware", "#22c55e", ["Layout-aware split: headings, tables with header rows, sentence-aware paragraphs",
+        "Overlap plus locators (page, section, sheet) for citations",
+        "Chunk ids come from the text hash, so re-ingest creates no duplicates"]),
+    ("Embed", "+ metadata", "#818cf8", ["Chunk file plus a metadata sidecar are written for Bedrock",
+        "owner, doc_type, tags, date, language become search filters",
+        "A document becomes visible only when it is complete"]),
+    ("Vectorize", "Bedrock KB", "#c084fc", ["A Bedrock ingestion job embeds the chunks with Titan Text V2",
+        "Vectors are stored in S3 Vectors (serverless, no idle cost)",
+        "Reconciliation re-checks S3 and the Knowledge Base before COMPLETED"]),
+]
+N = len(STAGES)
+BX0, BSTEP, BY, BW, BH, LANE = 495, 85, 170, 70, 62, 112
+T = 50.0
+
+
+def sx(i: int) -> float:
+    return BX0 + BSTEP * i
+
+
+def nk(t: float) -> str:
+    return f"{max(0.0, min(1.0, t / T)):.5f}"
+
+
+def window_anim(windows, f=0.2) -> str:
+    kt, v = [0.0], [0]
+    for s, e in windows:
+        ff = min(f, (e - s) / 2.2)
+        kt += [s, s + ff, e - ff, e]
+        v += [0, 1, 1, 0]
+    kt.append(T)
+    v.append(0)
+    return (f'<animate attributeName="opacity" dur="{T}s" repeatCount="indefinite" '
+            f'values="{";".join(map(str, v))}" keyTimes="{";".join(nk(x) for x in kt)}"/>')
+
+
+def mover(icon: str, evs, xs: float, xe: float, fade_end: float) -> str:
+    """evs = [(arrive, leave, x)...]: the icon sits at x from arrive to leave, glides to the next x."""
+    L = xe - xs
+    kt, kp = [0.0], [(evs[0][2] - xs) / L]
+    for a, l, x in evs:
+        kt += [a, l]
+        kp += [(x - xs) / L] * 2
+    kt.append(T)
+    kp.append(kp[-1])
+    s = evs[0][0]
+    op_kt = [0.0, s, s + 0.25, fade_end, fade_end + 0.3, T]
+    return (f'<g opacity="0">{icon}'
+            f'<animateMotion dur="{T}s" repeatCount="indefinite" path="M {xs},{LANE} L {xe},{LANE}" '
+            f'keyPoints="{";".join(f"{p:.5f}" for p in kp)}" keyTimes="{";".join(nk(x) for x in kt)}" calcMode="linear"/>'
+            f'<animate attributeName="opacity" dur="{T}s" repeatCount="indefinite" values="0;0;1;1;0;0" '
+            f'keyTimes="{";".join(nk(x) for x in op_kt)}"/></g>')
+
+
 def banner() -> str:
-    W, H = 1280, 460
-    stages = [  # x, colour, title, caption
-        (520, "#38bdf8", "Upload", "PDF, scans, Office, ZIP"),
-        (655, "#a855f7", "Extract", "unzip + validate"),
-        (790, "#f59e0b", "OCR + Clean", "Amazon Textract"),
-        (925, "#ec4899", "Enrich", "LLM type, tags, PII"),
-        (1060, "#22c55e", "Chunk", "layout-aware"),
-        (1195, "#818cf8", "Index", "Knowledge Base"),
-    ]
-    Y = 235
+    W, H = 1400, 510
     o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" '
-         f'aria-label="CleanDocs AI: documents and ZIP files land, are extracted, cleaned, enriched, chunked and indexed">']
+         f'aria-label="CleanDocs AI: a single file, then a ZIP, move step by step through upload, checksum, validate, archive, SQS, normalize, extract, enrich, chunk, embed and vectorize; failures go to the DLQ">']
     o.append('<defs>'
              '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1020"/><stop offset="0.55" stop-color="#171a3a"/><stop offset="1" stop-color="#2a1646"/></linearGradient>'
              '<linearGradient id="title" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#38bdf8"/><stop offset="0.5" stop-color="#a78bfa"/><stop offset="1" stop-color="#f472b6"/></linearGradient>'
@@ -46,65 +116,135 @@ def banner() -> str:
              '<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
              '</defs>')
     o.append(f'<rect width="{W}" height="{H}" rx="18" fill="url(#bg)"/>')
-    # soft background orbs
-    for cx, cy, r, c, d in ((760, 90, 150, "#6366f1", 9), (1100, 400, 170, "#ec4899", 11), (480, 420, 120, "#06b6d4", 13)):
+    for cx, cy, r, c, d in ((800, 90, 150, "#6366f1", 9), (1250, 440, 170, "#ec4899", 11), (500, 470, 120, "#06b6d4", 13)):
         o.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{c}" opacity="0.10"><animate attributeName="r" values="{r};{r + 25};{r}" dur="{d}s" repeatCount="indefinite"/></circle>')
     # ---- left: title and top 5 features
-    o.append(f'<rect x="20" y="20" width="420" height="420" rx="16" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.12"/>')
-    o.append(f'<text x="44" y="78" font-size="40" font-weight="800" fill="url(#title)" {FONT}>CleanDocs AI</text>')
-    o.append(f'<text x="45" y="104" font-size="14" fill="#c7d2fe" {FONT}>Document ingestion and indexing, built on AWS</text>')
+    o.append('<rect x="20" y="20" width="420" height="470" rx="16" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.12"/>')
+    o.append(f'<text x="44" y="82" font-size="40" font-weight="800" fill="url(#title)" {FONT}>CleanDocs AI</text>')
+    o.append(f'<text x="45" y="110" font-size="14" fill="#c7d2fe" {FONT}>Document ingestion and indexing, built on AWS</text>')
     feats = [("#38bdf8", "Upload anything", "PDF, scans, Word, Excel, text, ZIP"),
              ("#f59e0b", "Reads scans (OCR)", "Amazon Textract, confidence tracked"),
              ("#ec4899", "Labels itself", "LLM doc type, tags, summary, PII flag"),
              ("#22c55e", "Search-ready chunks", "Citations: page, section, owner, date"),
-             ("#a78bfa", "Resilient microservices", "16 services, retries, audit trail, reconcile")]
+             ("#a78bfa", "Resilient microservices", "16 services, SQS + DLQ, retries, audit trail")]
     for i, (c, t, s) in enumerate(feats):
-        y = 150 + i * 56
+        y = 168 + i * 64
         o.append(f'<g><rect x="44" y="{y - 20}" width="34" height="34" rx="9" fill="{c}"><animate attributeName="opacity" values="0.75;1;0.75" dur="{3 + i * 0.4}s" repeatCount="indefinite"/></rect>'
                  f'<text x="61" y="{y + 3}" text-anchor="middle" font-size="16" font-weight="800" fill="#0b1020" {FONT}>{i + 1}</text>'
                  f'<text x="92" y="{y - 4}" font-size="16" font-weight="700" fill="#ffffff" {FONT}>{t}</text>'
                  f'<text x="92" y="{y + 14}" font-size="12" fill="#c7d2fe" {FONT}>{s}</text></g>')
-    # ---- right: pipeline scene
-    o.append(f'<text x="860" y="62" text-anchor="middle" font-size="19" font-weight="700" fill="#e0e7ff" {FONT}>Land  →  Extract  →  Clean  →  Enrich  →  Chunk  →  Index</text>')
-    o.append(f'<text x="860" y="86" text-anchor="middle" font-size="12.5" fill="#a5b4fc" {FONT}>every file, every ZIP entry, one auditable pipeline</text>')
-    # connectors (animated dashes)
-    for (x1, *_), (x2, *_) in zip(stages, stages[1:]):
-        o.append(f'<line x1="{x1 + 45}" y1="{Y}" x2="{x2 - 45}" y2="{Y}" stroke="#818cf8" stroke-width="2.5" stroke-dasharray="7 6" opacity="0.8">'
-                 f'<animate attributeName="stroke-dashoffset" values="26;0" dur="1.2s" repeatCount="indefinite"/></line>')
-    # stage boxes
+    # ---- right: heading
+    o.append(f'<text x="920" y="50" text-anchor="middle" font-size="19" font-weight="700" fill="#e0e7ff" {FONT}>From upload to searchable index, step by step</text>')
+    o.append(f'<text x="920" y="74" text-anchor="middle" font-size="12.5" fill="#a5b4fc" {FONT}>one file, then a ZIP, then what happens when a step fails</text>')
+
+    # ---- schedule (seconds)
+    step_s, dw_s = 2.45, 2.0
+    a_s = [1.0 + step_s * i for i in range(N)]                       # single file arrivals
+    Z0, zstep, zdw = 29.6, 1.1, 0.75
+    a_z = [Z0 + zstep * i for i in range(4)]                        # zip: upload, checksum, validate, archive
+    open_t = a_z[3] + 1.0
+    dep = [open_t + 1.3 + 0.3 * j for j in range(3)]                # children leave the archive box
+    a_c = [dep[0] + 0.35 + zstep * (i - 4) for i in range(4, N)]    # lead child arrivals at stage 4..10
+    D0 = 44.6
+
+    # ---- connectors and boxes
+    for i in range(N - 1):
+        o.append(f'<line x1="{sx(i) + BW / 2}" y1="{BY}" x2="{sx(i + 1) - BW / 2}" y2="{BY}" stroke="#818cf8" stroke-width="2.5" stroke-dasharray="5 4" opacity="0.85">'
+                 f'<animate attributeName="stroke-dashoffset" values="18;0" dur="1.2s" repeatCount="indefinite"/></line>')
+    hi = {i: [(a_s[i], a_s[i] + dw_s + 0.2)] for i in range(N)}
+    for i in range(4):
+        hi[i].append((a_z[i], a_z[i] + (3.2 if i == 3 else zdw + 0.15)))
+    for k, i in enumerate(range(4, N)):
+        hi[i].append((a_c[k], a_c[k] + zdw + 0.15))
     titles = []
-    for i, (x, c, t, cap) in enumerate(stages):
-        if t == "Index":
-            o.append(f'<g filter="url(#glow)"><ellipse cx="{x}" cy="{Y - 26}" rx="40" ry="11" fill="{c}"/><rect x="{x - 40}" y="{Y - 26}" width="80" height="54" fill="{c}"/>'
-                     f'<ellipse cx="{x}" cy="{Y + 28}" rx="40" ry="11" fill="{c}"/><ellipse cx="{x}" cy="{Y - 26}" rx="40" ry="11" fill="#c7d2fe" opacity="0.55"/>'
-                     f'<animate attributeName="opacity" values="0.85;1;0.85" dur="2.4s" repeatCount="indefinite"/></g>')
-            titles.append(f'<text x="{x}" y="{Y + 8}" text-anchor="middle" font-size="13" font-weight="800" fill="#0b1020" {FONT}>{t}</text>')
+    for i, (t, cap, c, _) in enumerate(STAGES):
+        x = sx(i)
+        if t == "Vectorize":
+            o.append(f'<g><ellipse cx="{x}" cy="{BY - 24}" rx="35" ry="10" fill="{c}" fill-opacity="0.35" stroke="{c}" stroke-width="2"/>'
+                     f'<rect x="{x - 35}" y="{BY - 24}" width="70" height="50" fill="{c}" fill-opacity="0.28"/>'
+                     f'<line x1="{x - 35}" y1="{BY - 24}" x2="{x - 35}" y2="{BY + 26}" stroke="{c}" stroke-width="2"/><line x1="{x + 35}" y1="{BY - 24}" x2="{x + 35}" y2="{BY + 26}" stroke="{c}" stroke-width="2"/>'
+                     f'<ellipse cx="{x}" cy="{BY + 26}" rx="35" ry="10" fill="{c}" fill-opacity="0.35" stroke="{c}" stroke-width="2"/></g>')
         else:
-            o.append(f'<g><rect x="{x - 45}" y="{Y - 34}" width="90" height="68" rx="14" fill="{c}" fill-opacity="0.22" stroke="{c}" stroke-width="2">'
-                     f'<animate attributeName="fill-opacity" values="0.18;0.45;0.18" dur="{2.4 + i * 0.3}s" begin="{i * 0.35}s" repeatCount="indefinite"/></rect>'
-                     f'</g>')
-            titles.append(f'<text x="{x}" y="{Y + 5}" text-anchor="middle" font-size="13.5" font-weight="800" fill="#ffffff" stroke="#0b1020" stroke-width="3" paint-order="stroke" {FONT}>{t}</text>')
-        o.append(f'<text x="{x}" y="{Y + 64}" text-anchor="middle" font-size="11" fill="#c7d2fe" {FONT}>{cap}</text>')
-    # saved badges at the index (pop in repeatedly)
-    for k, (dx, dy) in enumerate(((-58, -62), (-10, -74), (40, -62))):
-        o.append(f'<g opacity="0"><text x="{1195 + dx}" y="{Y + dy}" font-size="12" font-weight="700" fill="#86efac" {FONT}>✓ saved'
-                 f'</text><animate attributeName="opacity" dur="{CYCLE}s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;{0.55 + k * 0.1};{0.58 + k * 0.1};{0.7 + k * 0.1};{0.75 + k * 0.1};1"/></g>')
-    # travelling documents
-    docs = [("#ef4444", "PDF", 120, 0.00), ("#f59e0b", "JPG", 345, 0.10), ("#3b82f6", "DOC", 160, 0.20), ("#22c55e", "XLS", 320, 0.30)]
-    for c, lab, y0, a in docs:
-        path = f"M 470,{y0} L 520,{Y} L 1195,{Y}"
-        o.append(traveller(doc_icon(c, lab), path, a, a + 0.5))
-    # a ZIP that lands, opens at Extract and fans out into three files
-    o.append(traveller(doc_icon("#a855f7", "ZIP"), f"M 470,260 L 520,{Y} L 655,{Y}", 0.42, 0.56))
-    for j, (c, lab, dy) in enumerate((("#ef4444", "PDF", -42), ("#3b82f6", "DOC", 0), ("#22c55e", "XLS", 42))):
-        a = 0.56 + j * 0.02
-        path = f"M 655,{Y} L 700,{Y + dy} L 1195,{Y}"
-        o.append(traveller(doc_icon(c, lab, 0.8), path, a, a + 0.40))
-    o.append(f'<text x="655" y="{Y - 54}" text-anchor="middle" font-size="11" font-weight="700" fill="#d8b4fe" {FONT} opacity="0">ZIP opened: files extracted'
-             f'<animate attributeName="opacity" dur="{CYCLE}s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.54;0.57;0.66;0.70;1"/></text>')
+            o.append(f'<rect x="{x - BW / 2}" y="{BY - BH / 2}" width="{BW}" height="{BH}" rx="13" fill="{c}" fill-opacity="0.18" stroke="{c}" stroke-width="2"/>')
+        # highlight overlay while a file is inside
+        o.append(f'<rect x="{x - BW / 2 - 3}" y="{BY - BH / 2 - 3}" width="{BW + 6}" height="{BH + 6}" rx="15" fill="{c}" fill-opacity="0.30" stroke="#ffffff" stroke-width="2" opacity="0" filter="url(#glow)">{window_anim(hi[i], 0.2)}</rect>')
+        titles.append(f'<text x="{x}" y="{BY + (0 if t != "Vectorize" else 2)}" text-anchor="middle" font-size="13" font-weight="800" fill="#ffffff" {FONT}>{t}</text>'
+                      f'<text x="{x}" y="{BY + 17}" text-anchor="middle" font-size="9.5" fill="#dbe4ff" {FONT}>{cap}</text>'
+                      f'<text x="{x}" y="{BY - 14}" text-anchor="middle" font-size="9.5" font-weight="700" fill="{c}" {FONT}>{i + 1}</text>')
+    # DLQ box under SQS
+    qx = sx(4)
+    o.append(f'<line x1="{qx}" y1="{BY + BH / 2}" x2="{qx}" y2="{BY + BH / 2 + 28}" stroke="#f87171" stroke-width="2" stroke-dasharray="4 4"/>')
+    o.append(f'<text x="{qx + 8}" y="{BY + BH / 2 + 19}" font-size="9.5" fill="#fca5a5" {FONT}>after retries</text>')
+    o.append(f'<rect x="{qx - 35}" y="{BY + BH / 2 + 28}" width="70" height="38" rx="11" fill="#ef4444" fill-opacity="0.18" stroke="#ef4444" stroke-width="2"/>')
+    o.append(f'<rect x="{qx - 38}" y="{BY + BH / 2 + 25}" width="76" height="44" rx="13" fill="#ef4444" fill-opacity="0.30" stroke="#ffffff" stroke-width="2" opacity="0" filter="url(#glow)">{window_anim([(D0 + 1.8, D0 + 4.6)])}</rect>')
+    o.append(f'<text x="{qx}" y="{BY + BH / 2 + 52}" text-anchor="middle" font-size="13" font-weight="800" fill="#ffffff" {FONT}>DLQ</text>')
     o.extend(titles)
-    # footer line
-    o.append(f'<text x="860" y="412" text-anchor="middle" font-size="12.5" fill="#a5b4fc" {FONT}>Microservices on Render  ·  AWS Step Functions orchestration  ·  Bedrock Knowledge Base on S3 Vectors</text>')
+
+    # ---- detail panel
+    PX, PY, PW, PH = 460, 300, 920, 160
+    o.append(f'<rect x="{PX}" y="{PY}" width="{PW}" height="{PH}" rx="14" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.15"/>')
+
+    def pgroup(windows, color, badge, title, lines, size=15) -> str:
+        g = [f'<g opacity="0">{window_anim(windows)}',
+             f'<circle cx="{PX + 38}" cy="{PY + 42}" r="20" fill="{color}"/>'
+             f'<text x="{PX + 38}" y="{PY + 48}" text-anchor="middle" font-size="18" font-weight="800" fill="#0b1020" {FONT}>{badge}</text>'
+             f'<text x="{PX + 72}" y="{PY + 50}" font-size="23" font-weight="800" fill="#ffffff" {FONT}>{title}</text>']
+        for k, ln in enumerate(lines):
+            g.append(f'<circle cx="{PX + 30}" cy="{PY + 84 + k * 28 - 5}" r="3.5" fill="{color}"/>'
+                     f'<text x="{PX + 44}" y="{PY + 84 + k * 28}" font-size="{size}" fill="#e0e7ff" {FONT}>{ln}</text>')
+        g.append('</g>')
+        return "".join(g)
+
+    # single file: one group per stage (Archive uses the "single" wording = line 1 only plus note)
+    for i, (t, cap, c, lines) in enumerate(STAGES):
+        end = a_s[i + 1] if i < N - 1 else a_s[i] + dw_s + 0.6
+        ls = lines if t != "Archive" else [lines[0], "ZIP uploads take a different route (see the next scene)", "Each file is tracked as its own document"]
+        o.append(pgroup([(a_s[i] + 0.05, end + 0.05)], c, str(i + 1), t, ls))
+    # ZIP scene
+    o.append(pgroup([(Z0 - 0.2, a_z[3])], "#a855f7", "ZIP", "One ZIP upload",
+                    ["The whole ZIP is stored once as the untouched original", "Checksum and validation run on the ZIP itself, once",
+                     "Next: Archive opens it"]))
+    o.append(pgroup([(a_z[3], dep[0] + 0.2)], "#a855f7", "4", "Archive opens the ZIP",
+                    ["Zip-bomb limits and path checks run before anything is extracted",
+                     "Every entry becomes its own document with its own status",
+                     "All children inherit the owner of the upload"]))
+    for k, i in enumerate(range(4, N)):
+        end = a_c[k + 1] if k < len(a_c) - 1 else a_c[k] + zdw + 0.9
+        t, cap, c, lines = STAGES[i]
+        o.append(pgroup([(a_c[k] - 0.1, end)], c, str(i + 1), "3 files from the ZIP, one by one",
+                        [f"Now at step {i + 1}, {t}: {lines[0]}", "Same steps as the single file: each gets its own chunks, labels and status",
+                         "The SQS gate feeds them through one at a time, so cost and memory stay small"], size=14.5))
+    # failure scene
+    o.append(pgroup([(D0, D0 + 4.8)], "#ef4444", "!", "When a step fails: SQS retries, then the DLQ",
+                    ["The queue retries the step automatically with back-off", "After the last retry the message moves to the DLQ and is kept, not lost",
+                     "Fix the cause, then replay the file from the DLQ: nothing disappears silently"]))
+    # mode tag (top right of panel)
+    for label, win, col in (("SINGLE FILE", (0.3, 28.6), "#38bdf8"), ("ZIP UPLOAD", (28.9, 44.2), "#a855f7"), ("WHEN SOMETHING FAILS", (D0 - 0.2, D0 + 5.0), "#ef4444")):
+        o.append(f'<text x="{PX + PW - 20}" y="{PY + 30}" text-anchor="end" font-size="12" font-weight="800" fill="{col}" letter-spacing="1.5" opacity="0" {FONT}>{label}{window_anim([win])}</text>')
+
+    # ---- travellers
+    pdf = doc_icon("#ef4444", "PDF", 0.9)
+    ev = [(0.5, 0.5, sx(0) - 55)] + [(a_s[i], a_s[i] + dw_s, sx(i)) for i in range(N)]
+    o.append(mover(pdf, ev, sx(0) - 55, sx(N - 1), a_s[-1] + dw_s + 0.3))
+    # ZIP: enters, passes upload/checksum/validate, opens at archive
+    zev = [(Z0 - 0.6, Z0 - 0.6, sx(0) - 55)] + [(a_z[i], a_z[i] + (1.0 if i == 3 else zdw), sx(i)) for i in range(4)]
+    o.append(mover(doc_icon("#a855f7", "ZIP", 0.9), zev, sx(0) - 55, sx(3), a_z[3] + 1.0))
+    # three children leave the archive box and travel one behind another
+    kids = (("#ef4444", "PDF", -26), ("#3b82f6", "DOC", 0), ("#22c55e", "XLS", 26))
+    for j, (c, lab, off) in enumerate(kids):
+        cev = [(open_t, dep[j], sx(3) + off)]
+        for k, i in enumerate(range(4, N)):
+            cev.append((a_c[k] + 0.3 * j, a_c[k] + 0.3 * j + zdw, sx(i)))
+        o.append(mover(doc_icon(c, lab, 0.85), cev, sx(3) - 26, sx(N - 1), cev[-1][1] + 0.2))
+    # failed file drops from SQS into the DLQ
+    fx = sx(4)
+    drop = (f'<g opacity="0">{doc_icon("#ef4444", "!", 0.9)}'
+            f'<animateMotion dur="{T}s" repeatCount="indefinite" path="M {fx},{LANE} L {fx},{BY + BH / 2 + 49}" keyPoints="0;0;1;1" '
+            f'keyTimes="0;{nk(D0 + 0.8)};{nk(D0 + 2.2)};1" calcMode="linear"/>'
+            f'<animate attributeName="opacity" dur="{T}s" repeatCount="indefinite" values="0;0;1;1;0;0" '
+            f'keyTimes="0;{nk(D0 + 0.4)};{nk(D0 + 0.6)};{nk(D0 + 4.2)};{nk(D0 + 4.5)};1"/></g>')
+    o.append(drop)
+    o.append(f'<text x="920" y="487" text-anchor="middle" font-size="12.5" fill="#a5b4fc" {FONT}>Microservices on Render  ·  AWS Step Functions + SQS orchestration  ·  Bedrock Knowledge Base on S3 Vectors</text>')
     o.append('</svg>')
     return "\n".join(o)
 
