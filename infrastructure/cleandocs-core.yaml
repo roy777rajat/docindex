@@ -248,7 +248,7 @@ Resources:
                 Action: s3:ListBucket
                 Resource: !GetAtt Bucket.Arn
               - Effect: Allow
-                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query, dynamodb:DescribeTable]  # DescribeTable: the /health/ready registry check
                 Resource: !GetAtt RegistryTable.Arn
               - Effect: Allow
                 Action: [dynamodb:PutItem, dynamodb:Query]
@@ -286,7 +286,7 @@ Resources:
                 Action: s3:ListBucket
                 Resource: !GetAtt Bucket.Arn
               - Effect: Allow
-                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query, dynamodb:DescribeTable]  # DescribeTable: the /health/ready registry check
                 Resource: !GetAtt RegistryTable.Arn
               - Effect: Allow
                 Action: [dynamodb:PutItem, dynamodb:Query]
@@ -335,7 +335,7 @@ Resources:
                 Action: [bedrock:StartIngestionJob, bedrock:GetIngestionJob, bedrock:ListIngestionJobs, bedrock:GetKnowledgeBase, bedrock:GetDataSource, bedrock:ListKnowledgeBaseDocuments, bedrock:GetKnowledgeBaseDocuments]
                 Resource: !GetAtt KnowledgeBase.KnowledgeBaseArn
               - Effect: Allow
-                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query, dynamodb:DescribeTable]  # DescribeTable: the /health/ready registry check
                 Resource: !GetAtt RegistryTable.Arn
               - Effect: Allow
                 Action: [dynamodb:PutItem, dynamodb:Query]

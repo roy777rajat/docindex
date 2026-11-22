@@ -82,7 +82,7 @@ def test_request_bodies_conform_to_the_services_request_model(defs):
             ctx = {k[:-2]: sample[v] for k, v in body["context"].items()}
             ProcessRequest.model_validate({"context": ctx, "parameters": body["parameters"]})  # extra="forbid" would reject typos
             seen += 1
-    assert seen == 14
+    assert seen == 15   # + validation of each ZIP child, which the file workflow must run itself
 
 
 def test_file_workflow_runs_stages_in_order_with_extraction_loop_and_duplicate_exit(defs):
@@ -97,7 +97,7 @@ def test_file_workflow_runs_stages_in_order_with_extraction_loop_and_duplicate_e
         name = st["Next"]
         if name in ("IsDuplicate", "ExtractionDone"):
             name = d[name]["Default"]
-    assert [o.lower() for o in order[:7]] == FILE_STAGES
+    assert [o.lower() for o in order[:len(FILE_STAGES)]] == FILE_STAGES
     assert d["ExtractionDone"]["Choices"][0]["Next"] == "Extraction"                         # resume the next OCR batch
     assert d["IsDuplicate"]["Choices"][0]["Next"] == "ReleaseGate"
     assert d["BusinessFailure"]["Next"] == "ReleaseGate"
@@ -196,3 +196,12 @@ def test_dispatcher_package_uses_only_stdlib_and_boto(tmp_path):
                 for m in mods:
                     assert m.split(".")[0] in allowed, f"{n} imports {m}"
     assert build(tmp_path).read_bytes() == z.read_bytes()                  # deterministic: same code, same hash
+
+
+def test_file_workflow_validates_each_file_before_normalizing():
+    """ZIP children are created by archive-service without file_kind; normalization refuses unvalidated documents with a
+    business error that the workflow ends quietly, so a missing validation stage silently stalls the ingestion."""
+    d = file_workflow(URLS)["States"]
+    assert FILE_STAGES[0] == "validation"
+    assert d[file_workflow(URLS)["StartAt"]]["Parameters"]["ApiEndpoint"].endswith("/health/ready")
+    assert "/validation/" in d[file_workflow(URLS)["StartAt"]]["Parameters"]["ApiEndpoint"] or "validation" in d[file_workflow(URLS)["StartAt"]]["Parameters"]["ApiEndpoint"]

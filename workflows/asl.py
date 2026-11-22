@@ -17,7 +17,7 @@ BUSINESS = [f"States.Http.StatusCode.{c}" for c in (404, 409, 415, 422)]
 TRANSIENT = ["States.Timeout"] + [f"States.Http.StatusCode.{c}" for c in (429, 502, 503, 504)]
 CONN = {"ConnectionArn": "${ConnectionArn}"}
 
-FILE_STAGES = ["normalization", "cleaning", "duplicate", "extraction", "metadata", "chunking", "embedding"]
+FILE_STAGES = ["validation", "normalization", "cleaning", "duplicate", "extraction", "metadata", "chunking", "embedding"]
 OPTIONAL_STAGES = ["entity-extraction", "graph"]
 
 
