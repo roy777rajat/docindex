@@ -27,8 +27,11 @@ def prepare_environment() -> None:
     if not os.environ.get("S3_BUCKET"):
         account = boto3.client("sts", region_name=region).get_caller_identity()["Account"]
         os.environ["S3_BUCKET"] = f"cleandocs-{account}-{region}"
-    os.environ.setdefault("BEDROCK_KNOWLEDGE_BASE_ID", "NEYHRDRGOT")
-    os.environ.setdefault("BEDROCK_DATA_SOURCE_ID", "FWC2ZGVLIT")
+    if not os.environ.get("BEDROCK_KNOWLEDGE_BASE_ID"):   # discover from the cleandocs-core stack outputs (any AWS account)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import _cfg
+        c = _cfg.load(region)
+        os.environ["BEDROCK_KNOWLEDGE_BASE_ID"], os.environ["BEDROCK_DATA_SOURCE_ID"] = c["kb_id"], c["ds_id"]
     os.environ["SERVICE_AUTH_SECRET"] = SECRET
     os.environ["STEP_FUNCTIONS_INGESTION_ARN"] = ""   # never start the real workflow from here
     for p in (ROOT / "shared", *(ROOT / "services" / f"{s}-service" for s in SERVICES)):

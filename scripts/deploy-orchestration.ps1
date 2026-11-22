@@ -18,8 +18,9 @@ if (-not $ServiceAuthSecret -or $ServiceAuthSecret.Length -lt 24) {
 }
 
 Write-Host "1/5 core stack (IAM updates for kb-source delete and KB document listing)"
+$admin = aws sts get-caller-identity --query Arn --output text
 aws cloudformation deploy --template-file infrastructure/cleandocs-core.yaml --stack-name cleandocs-core `
-  --capabilities CAPABILITY_NAMED_IAM --tags project=cleandocs --region $Region
+  --capabilities CAPABILITY_NAMED_IAM --tags project=cleandocs --region $Region --parameter-overrides "AdminPrincipalArn=$admin"
 if ($LASTEXITCODE -ne 0) { throw "core stack deploy failed" }
 
 Write-Host "2/5 generate workflow definitions"

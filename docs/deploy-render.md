@@ -41,7 +41,7 @@ If you lost the auth secret: choose a new one, put it in `cleandocs-auth`, and r
 
 ## 4. Create the services from the Blueprint
 Render dashboard -> New -> Blueprint -> pick the repo, branch `main`, file `render.yaml` -> Apply.
-It creates group `cleandocs-config` (non-secret settings) and 15 free Docker web services in Frankfurt. First builds take several minutes each.
+It creates group `cleandocs-config` (non-secret settings) and 16 free Docker web services in Frankfurt. First builds take several minutes each.
 Every service shows "Live" when `/health/live` answers. `autoDeploy` is off on purpose: all services share `shared/`, so an automatic deploy would rebuild all 16 images and use up free build minutes. To update: change code, push, then Manual Deploy on the services that changed (all of them if `shared/` changed).
 
 ## 5. Check the real URLs

@@ -30,15 +30,15 @@ SERVICES: dict[str, tuple[str, dict[str, str]]] = {
     "enrichment": ("processing", {"AI_ENRICHMENT_ENABLED": "true", "ENRICHMENT_MONTHLY_DOC_CAP": "1000"}),
     "chunking": ("processing", {"CHUNK_TARGET_CHARS": "1200", "CHUNK_MAX_CHARS": "1800", "CHUNK_OVERLAP_CHARS": "150"}),
     "embedding": ("processing", {}),
-    "vector-indexing": ("indexing", {"BEDROCK_KNOWLEDGE_BASE_ID": "NEYHRDRGOT", "BEDROCK_DATA_SOURCE_ID": "FWC2ZGVLIT"}),
-    "reconciliation": ("indexing", {"BEDROCK_KNOWLEDGE_BASE_ID": "NEYHRDRGOT", "BEDROCK_DATA_SOURCE_ID": "FWC2ZGVLIT"}),
+    "vector-indexing": ("indexing", {"BEDROCK_KNOWLEDGE_BASE_ID": "{kb_id}", "BEDROCK_DATA_SOURCE_ID": "{ds_id}"}),
+    "reconciliation": ("indexing", {"BEDROCK_KNOWLEDGE_BASE_ID": "{kb_id}", "BEDROCK_DATA_SOURCE_ID": "{ds_id}"}),
     "entity-extraction": ("processing", {}),
     "graph": ("processing", {}),
 }
 SECRET_GROUPS = ["cleandocs-auth", "cleandocs-aws-ingest", "cleandocs-aws-processing", "cleandocs-aws-indexing"]
 
 
-def render(account: str, region: str, render_region: str) -> str:
+def render(account: str, region: str, render_region: str, kb_id: str = "NEYHRDRGOT", ds_id: str = "FWC2ZGVLIT") -> str:
     bucket = f"cleandocs-{account}-{region}"
     ingestion_arn = f"arn:aws:states:{region}:{account}:stateMachine:cleandocs-ingestion"
     out = [
@@ -62,7 +62,7 @@ def render(account: str, region: str, render_region: str) -> str:
             "      - fromGroup: cleandocs-config", "      - fromGroup: cleandocs-auth", f"      - fromGroup: cleandocs-aws-{tier}",
         ]
         for k, v in extra.items():
-            out.append(f'      - {{ key: {k}, value: "{v.format(ingestion_arn=ingestion_arn)}" }}')
+            out.append(f'      - {{ key: {k}, value: "{v.format(ingestion_arn=ingestion_arn, kb_id=kb_id, ds_id=ds_id)}" }}')
     return "\n".join(out) + "\n"
 
 
@@ -70,7 +70,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--account", default="141571819444")
     ap.add_argument("--aws-region", default="eu-west-1")
+    ap.add_argument("--kb-id", default="NEYHRDRGOT", help="BedrockKnowledgeBase id = stack output KnowledgeBaseId")
+    ap.add_argument("--ds-id", default="FWC2ZGVLIT", help="data source id = stack output DataSourceId")
     ap.add_argument("--region", default="frankfurt", help="Render region (closest to eu-west-1)")
     a = ap.parse_args()
-    (ROOT / "render.yaml").write_text(render(a.account, a.aws_region, a.region), encoding="utf-8", newline="\n")
+    (ROOT / "render.yaml").write_text(render(a.account, a.aws_region, a.region, a.kb_id, a.ds_id), encoding="utf-8", newline="\n")
     print(f"wrote render.yaml ({len(SERVICES)} services)")

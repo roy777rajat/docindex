@@ -28,3 +28,13 @@ render-urls.json
 .local-state.json
 .local-pids.json
 logs/
+
+# scratch files from manual checks (contain document text / personal data): never commit
+/ex.json
+/m.json
+/q.json
+/*.local.json
+/ch.json
+*.pem
+*.key
+secrets.*
