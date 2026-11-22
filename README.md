@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/banner.svg" alt="CleanDocs AI: documents and ZIP files land, are extracted, cleaned, enriched, chunked and indexed" width="100%"/>
+<img src="docs/assets/cleandocs-banner.svg" alt="CleanDocs AI: documents and ZIP files land, are extracted, cleaned, enriched, chunked and indexed" width="100%"/>
 
 <img src="docs/assets/tech-stack.svg" alt="Technology stack: Python, FastAPI, Docker, AWS (S3, S3 Vectors, Bedrock, Textract, Step Functions, Lambda, DynamoDB...), Render" width="100%"/>
 
@@ -155,7 +155,8 @@ docindex/
 
 > _Placeholder: the architecture diagram will be added here._
 >
-> `![Architecture](docs/assets/architecture.png)`
+> `
+<img src="docs/assets/cleandocs-banner.svg" alt="CleanDocs AI: documents and ZIP files land, are extracted, cleaned, enriched, chunked and indexed" width="100%"/>`
 
 ---
 
