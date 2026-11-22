@@ -59,7 +59,7 @@ Keep this PowerShell window open for step 6 (the variable lives only in this win
 python scripts\build_render_yaml.py --account <NEW_ACCOUNT_ID> --kb-id <KnowledgeBaseId> --ds-id <DataSourceId>
 git add -A ; git commit -m "Point Render blueprint at the new AWS account" ; git push
 ```
-(Search the repo for the old account id `141571819444` in docs only if you want the text updated; the code takes the account from AWS.)
+(The code takes the account from AWS; the docs use placeholders such as `<ACCOUNT_ID>`, `<KB_ID>` and `<DS_ID>`.)
 
 ## 7. Render
 1. Dashboard -> Environment Groups -> create **before** the Blueprint (names must match exactly):

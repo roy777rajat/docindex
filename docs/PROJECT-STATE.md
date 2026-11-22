@@ -99,12 +99,12 @@ you (curl/Postman) --> upload-service (Render) --> S3 raw/ + DynamoDB registry -
 12. Sidecar size (1,500 B) and S3 Vectors 2 KB filterable limit not tested at the maximum against real S3 Vectors.
 
 ## 8. Operating facts (this deployment)
-| Thing | Value (account 141571819444, eu-west-1) |
+| Thing | Value (account <ACCOUNT_ID>, eu-west-1) |
 |---|---|
-| Bucket | `cleandocs-141571819444-eu-west-1` |
+| Bucket | `cleandocs-<ACCOUNT_ID>-eu-west-1` |
 | Tables | `cleandocs-registry`, `document-ingest-trail` |
-| Knowledge Base / data source | `NEYHRDRGOT` / `FWC2ZGVLIT` (always readable with `.\scripts\show-config.ps1`) |
-| Vector bucket / index | `cleandocs-vectors-141571819444` / `cleandocs-index` (Titan v2, 1024-dim, cosine) |
+| Knowledge Base / data source | `<KB_ID>` / `<DS_ID>` (always readable with `.\scripts\show-config.ps1`) |
+| Vector bucket / index | `cleandocs-vectors-<ACCOUNT_ID>` / `cleandocs-index` (Titan v2, 1024-dim, cosine) |
 | State machines | `cleandocs-ingestion`, `cleandocs-file`; Lambda `cleandocs-dispatcher` |
 | Stacks | `cleandocs-core`, `cleandocs-orchestration` |
 | Render | Blueprint `cleandocs`; env groups `cleandocs-auth`, `cleandocs-aws-ingest|processing|indexing`, `cleandocs-config` |
