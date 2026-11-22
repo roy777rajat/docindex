@@ -16,6 +16,10 @@ Sidecar attributes (short keys, well under the Bedrock ~1 KB / 35-key metadata l
 | `page_start`, `page_end` | page range (PDF/images/TIFF) when known |
 | `section` | heading path where the chunk starts, truncated to 120 chars, when known |
 | `ingestion_id`, `doc_type` | filtering |
+| `owner` | access label: `ADMIN` (reserved) or a lower-case user id; query-api filters `owner == user` (ADMIN: no filter). Legacy rows count as ADMIN |
+| `file_kind`, `language` | filtering (omitted when unknown) |
+| `uploaded_at` | epoch seconds (number) for date-range filters |
+| `ocr_confidence` | only when the extraction step recorded it |
 
 Full detail (character offsets, bounding boxes, extraction method) lives in
 `processed/documents/{id}/chunks/chunks.json` and the registry, resolved by `document_id` + `chunk_id`.

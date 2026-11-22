@@ -19,6 +19,7 @@ CONN = {"ConnectionArn": "${ConnectionArn}"}
 
 FILE_STAGES = ["validation", "normalization", "cleaning", "duplicate", "extraction", "metadata", "chunking", "embedding"]
 OPTIONAL_STAGES = ["entity-extraction", "graph"]
+SOFT_BEFORE = {"chunking": "enrichment"}   # soft stage placed before this required stage: its failure never fails the document
 
 
 def _retry(interval: int, backoff: float, attempts: int, errors: list[str] | None = None) -> dict[str, Any]:
@@ -164,6 +165,13 @@ def file_workflow(urls: dict[str, str], duplicate_policy_ref: str = "${Duplicate
             proc_next = "ExtractionDone"
         proc = b.call(svc, stage, proc_next, context=ctx, parameters=params, on_business="BusinessFailure", on_error=fail)
         nxt = b.ready(svc, proc, fail)
+        if stage in SOFT_BEFORE:
+            soft = SOFT_BEFORE[stage]
+            sproc = b.call(soft, soft, nxt, context=ctx, on_business=nxt, on_error=nxt)
+            b.states[sproc]["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.optional_error", "Next": nxt}]
+            srdy = b.ready(soft, sproc, None, attempts=5)
+            b.states[srdy]["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.optional_error", "Next": nxt}]
+            nxt = srdy
     return {"Comment": "CleanDocs file workflow (one document at a time, guarded by the DynamoDB gate)",
             "StartAt": nxt, "States": b.states}
 

@@ -30,6 +30,7 @@ class StageDeps:
     audit: AuditWriter
     textract: Any = None
     bedrock_agent: Any = None
+    bedrock_runtime: Any = None
 
 
 def stage_key(document_id: str, stage_dir: str, filename: str) -> str:
@@ -117,22 +118,23 @@ def execute_stage(
 
 
 def default_deps(settings: Settings, service_name: str, version: str, with_textract: bool = False,
-                 with_bedrock_agent: bool = False) -> StageDeps:
+                 with_bedrock_agent: bool = False, with_bedrock_runtime: bool = False) -> StageDeps:
     return StageDeps(
         settings=settings, s3=aws.s3_client(settings), registry=Registry(aws.registry_table(settings)),
         audit=AuditWriter(aws.trail_table(settings), service_name, version, settings.render_instance_id),
         textract=aws.textract_client(settings) if with_textract else None,
         bedrock_agent=aws.bedrock_agent_client(settings) if with_bedrock_agent else None,
+        bedrock_runtime=aws.bedrock_runtime_client(settings) if with_bedrock_runtime else None,
     )
 
 
 def build_stage_app(
     service_name: str, version: str, run: Callable[[StageDeps, ProcessRequest], ProcessResponse],
     settings: Settings | None = None, deps: StageDeps | None = None, with_textract: bool = False,
-    with_bedrock_agent: bool = False, extra_routes: Callable[[FastAPI, StageDeps, Callable[..., None]], None] | None = None,
+    with_bedrock_agent: bool = False, with_bedrock_runtime: bool = False, extra_routes: Callable[[FastAPI, StageDeps, Callable[..., None]], None] | None = None,
 ) -> FastAPI:
     settings = settings or Settings(service_name=service_name, service_version=version)
-    d = deps or default_deps(settings, service_name, version, with_textract, with_bedrock_agent)
+    d = deps or default_deps(settings, service_name, version, with_textract, with_bedrock_agent, with_bedrock_runtime)
 
     def s3_ok() -> bool:
         d.s3.head_bucket(Bucket=settings.s3_bucket)

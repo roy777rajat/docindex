@@ -151,6 +151,7 @@ def test_docx_is_chunked_with_sections_and_published_with_citation_sidecars(env)
     assert first["document_id"] == "d1" and first["filename"] == "report.docx"
     assert first["archive_entry_path"] == "reports/2025/report.docx" and first["parent_document_id"] == "doc_zip"
     assert first["section"].startswith("Annual Report")
+    assert first["owner"] == "ADMIN" and first["file_kind"] and isinstance(first["uploaded_at"], int)
     last = s3json(env, sorted(sidecars)[-1])["metadataAttributes"]
     assert last["section"].startswith("Annual Report")  # section = where the chunk starts
     body = env["aws"]["s3"].get_object(Bucket=env["aws"]["bucket"], Key=txts[0])["Body"].read().decode()

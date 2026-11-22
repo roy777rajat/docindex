@@ -303,6 +303,11 @@ Resources:
               - Effect: Allow
                 Action: bedrock:InvokeModel
                 Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/*
+              - Effect: Allow   # enrichment-service: Nova Micro through the EU cross-region inference profile
+                Action: [bedrock:InvokeModel, bedrock:Converse]
+                Resource:
+                  - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/eu.amazon.nova-micro-v1:0
+                  - arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0
               - Effect: Allow
                 Action: [states:SendTaskSuccess, states:SendTaskFailure, states:SendTaskHeartbeat]
                 Resource: "*"

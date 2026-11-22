@@ -1,7 +1,7 @@
 # Deploy Phase 7: dispatcher Lambda, gate schedule and the two Step Functions workflows.
 # Run from the repo root in PowerShell:
 #   .\scripts\deploy-orchestration.ps1 -UrlTemplate "https://cleandocs-{service}-service.onrender.com"
-# {service} is replaced with: validation archive manifest normalization cleaning duplicate extraction metadata
+# {service} is replaced with: validation archive manifest normalization cleaning duplicate extraction metadata enrichment
 #                             chunking embedding vector-indexing entity-extraction graph
 # The services do not need to exist yet; the workflows only call them when an ingestion runs.
 param(

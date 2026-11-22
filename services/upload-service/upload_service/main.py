@@ -29,6 +29,7 @@ class UploadResponse(BaseModel):
     workflow_execution_arn: str | None = None
     trace_id: str
     idempotent_replay: bool = False
+    owner: str = "ADMIN"
 
 
 def create_app(settings: Settings | None = None, deps: UploadDeps | None = None) -> FastAPI:
@@ -59,12 +60,13 @@ def create_app(settings: Settings | None = None, deps: UploadDeps | None = None)
         request: Request,
         file: UploadFile = File(...),
         label: str | None = Form(default=None, max_length=200),
+        owner: str | None = Form(default=None, max_length=100),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ) -> dict:
         trace_id = request.headers.get("x-trace-id") or new_trace_id()
         return handle_upload(
             d, fileobj=file.file, filename=file.filename or "", content_type=file.content_type,
-            idempotency_key=idempotency_key, label=label, trace_id=trace_id,
+            idempotency_key=idempotency_key, label=label, trace_id=trace_id, owner=owner,
         )
 
     return app

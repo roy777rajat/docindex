@@ -63,13 +63,14 @@ class Registry:
         size_bytes: int, checksum_sha256: str, s3_uri_original: str,
         content_type_declared: str | None = None, parent_document_id: str | None = None,
         archive_entry_path: str | None = None, archive_depth: int = 0,
+        owner: str = "ADMIN",
     ) -> bool:
         """Returns False if the document already exists (idempotent create)."""
         now = iso()
         return self._put_new({
             "PK": registry_doc_pk(document_id), "SK": META,
             "document_id": document_id, "ingestion_id": ingestion_id,
-            "parent_document_id": parent_document_id,
+            "parent_document_id": parent_document_id, "owner": owner,
             "original_filename": original_filename, "extension": extension,
             "archive_entry_path": archive_entry_path, "archive_depth": archive_depth,
             "size_bytes": size_bytes, "checksum_sha256": checksum_sha256,
@@ -87,11 +88,11 @@ class Registry:
         self._update(registry_doc_pk(document_id), META, fields)
 
     # ---- ingestions and manifest membership ----
-    def create_ingestion(self, *, ingestion_id: str, trace_id: str, label: str | None = None) -> bool:
+    def create_ingestion(self, *, ingestion_id: str, trace_id: str, label: str | None = None, owner: str = "ADMIN") -> bool:
         now = iso()
         return self._put_new({
             "PK": registry_ingest_pk(ingestion_id), "SK": META, "ingestion_id": ingestion_id,
-            "trace_id": trace_id, "label": label, "status": DocumentStatus.PROCESSING.value,
+            "trace_id": trace_id, "label": label, "owner": owner, "status": DocumentStatus.PROCESSING.value,
             "created_at": now, "updated_at": now,
         })
 

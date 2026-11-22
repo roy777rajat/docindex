@@ -83,10 +83,14 @@ def _start_workflow(deps: UploadDeps, ingestion_id: str, payload: dict[str, Any]
 
 def handle_upload(
     deps: UploadDeps, *, fileobj: BinaryIO, filename: str, content_type: str | None,
-    idempotency_key: str | None, label: str | None, trace_id: str,
+    idempotency_key: str | None, label: str | None, trace_id: str, owner: str | None = None,
 ) -> dict[str, Any]:
     settings = deps.settings
     key = validate_idempotency_key(idempotency_key)
+    try:
+        owner_norm = utils.normalize_owner(owner)
+    except ValueError as exc:
+        raise ValidationFailure(str(exc), code="BAD_OWNER") from exc
     if key:
         previous = deps.registry.get_idempotent_response(key)
         if previous:
@@ -116,10 +120,11 @@ def handle_upload(
         except ClientError as exc:
             raise classify_exception(exc) from exc
 
-        deps.registry.create_ingestion(ingestion_id=ingestion_id, trace_id=trace_id, label=label)
+        deps.registry.create_ingestion(ingestion_id=ingestion_id, trace_id=trace_id, label=label, owner=owner_norm)
         deps.registry.create_document(
             document_id=document_id, ingestion_id=ingestion_id, original_filename=clean_name, extension=ext,
             size_bytes=size, checksum_sha256=checksum, s3_uri_original=s3_uri, content_type_declared=content_type,
+            owner=owner_norm,
         )
         deps.registry.add_member(ingestion_id=ingestion_id, document_id=document_id, role="FILE",
                                  s3_uri=s3_uri, checksum_sha256=checksum, original_filename=clean_name)
@@ -139,7 +144,7 @@ def handle_upload(
         "ingestion_id": ingestion_id, "document_id": document_id, "filename": clean_name,
         "size_bytes": size, "checksum_sha256": checksum, "s3_uri": s3_uri,
         "workflow_started": started, "workflow_execution_arn": execution_arn, "trace_id": trace_id,
-        "idempotent_replay": False,
+        "idempotent_replay": False, "owner": owner_norm,
     }
     if key:
         deps.registry.store_idempotent_response(key, response)

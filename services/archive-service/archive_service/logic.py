@@ -175,6 +175,7 @@ def run_extraction(deps: ArchiveDeps, ctx: TraceContext, input_s3_uri: str | Non
                                 document_id=cid, ingestion_id=ingestion_id, original_filename=utils.safe_filename(name),
                                 extension=ext, size_bytes=size, checksum_sha256=checksum, s3_uri_original=child_uri,
                                 parent_document_id=parent_id, archive_entry_path=path, archive_depth=depth + 1,
+                                owner=utils.doc_owner(doc),
                             )
                             entries.append({**base, "status": "ACCEPTED", "s3_uri": child_uri, "size_bytes": size,
                                             "checksum_sha256": checksum, "file_kind": kind})

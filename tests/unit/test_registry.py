@@ -48,3 +48,12 @@ def test_idempotency_key_returns_first_response(registry_table):
     assert reg.store_idempotent_response("k1", {"document_id": "doc_1", "size": 5})
     assert not reg.store_idempotent_response("k1", {"document_id": "doc_2"})
     assert reg.get_idempotent_response("k1") == {"document_id": "doc_1", "size": 5}
+
+
+def test_owner_defaults_to_admin_and_is_stored(registry_table):
+    reg = Registry(registry_table)
+    _doc(reg)
+    _doc(reg, doc="doc_2", owner="bob")
+    reg.create_ingestion(ingestion_id="ing_9", trace_id="t", owner="bob")
+    assert reg.get_document("doc_1")["owner"] == "ADMIN" and reg.get_document("doc_2")["owner"] == "bob"
+    assert reg.get_ingestion("ing_9")["owner"] == "bob"

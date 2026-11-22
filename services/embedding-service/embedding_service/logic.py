@@ -25,15 +25,32 @@ def est_tokens(text: str) -> int:
     return math.ceil(len(text) / 3)
 
 
+def _epoch(iso_ts: str | None) -> int | None:
+    """uploaded_at as epoch seconds so it can be range-filtered (S3 Vectors filters compare numbers)."""
+    if not iso_ts:
+        return None
+    try:
+        from datetime import datetime
+        return int(datetime.fromisoformat(str(iso_ts).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
 def build_attributes(doc: dict[str, Any], meta: dict[str, Any], chunk: dict[str, Any]) -> dict[str, Any]:
     """Citation attributes. Absent locators are omitted, never invented. Everything else is resolvable via the
     chunk manifest and registry using document_id + chunk_id."""
     a: dict[str, Any] = {
         "document_id": doc["document_id"], "chunk_id": chunk["chunk_id"], "chunk_index": chunk["index"],
         "filename": doc["original_filename"][:120], "ingestion_id": doc["ingestion_id"],
-        "doc_type": meta.get("doc_type", "general"),
+        "doc_type": doc.get("doc_type") or meta.get("doc_type", "general"),
+        "owner": utils.doc_owner(doc),
     }
-    optional = {"parent_document_id": doc.get("parent_document_id"),
+    optional = {"file_kind": doc.get("file_kind"), "language": meta.get("language") or doc.get("language"),
+                "uploaded_at": _epoch(doc.get("uploaded_at")), "ocr_confidence": doc.get("avg_ocr_confidence"),
+                "ocr_low_confidence": doc.get("ocr_low_confidence"),
+                "doc_date": doc.get("doc_date"), "tags": list(doc.get("tags") or []) or None,
+                "has_pii": doc.get("contains_pii") if doc.get("enriched") else None,
+                "parent_document_id": doc.get("parent_document_id"),
                 "archive_entry_path": (doc.get("archive_entry_path") or "")[:200] or None,
                 "page_start": chunk.get("page_start"), "page_end": chunk.get("page_end"),
                 "sheet": (chunk.get("sheet") or "")[:60] or None, "section": (chunk.get("section") or "")[:120] or None}

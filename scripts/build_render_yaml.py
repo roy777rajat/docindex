@@ -1,4 +1,4 @@
-"""Generate the root render.yaml (one Blueprint for all 15 services). Re-run after changing a service list or setting.
+"""Generate the root render.yaml (one Blueprint for all 16 services). Re-run after changing a service list or setting.
 
   python scripts/build_render_yaml.py [--account 141571819444] [--region frankfurt]
 
@@ -7,7 +7,7 @@ Design:
   - secrets live in env groups you create in the Render dashboard BEFORE syncing the Blueprint (Render does not prompt for
     values inside Blueprint env groups): cleandocs-auth, cleandocs-aws-ingest, cleandocs-aws-processing, cleandocs-aws-indexing
   - each service gets exactly one AWS tier (least privilege): ingest, processing or indexing
-  - autoDeploy is off: every service shares `shared/`, so a push would rebuild all 15 images and burn free build minutes
+  - autoDeploy is off: every service shares `shared/`, so a push would rebuild all 16 images and burn free build minutes
 """
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ SERVICES: dict[str, tuple[str, dict[str, str]]] = {
     "duplicate": ("processing", {}),
     "extraction": ("processing", {"OCR_ENABLED": "true", "TEXTRACT_MONTHLY_PAGE_CAP": "300", "OCR_PAGES_PER_CALL": "4"}),
     "metadata": ("processing", {}),
+    "enrichment": ("processing", {"AI_ENRICHMENT_ENABLED": "true", "ENRICHMENT_MONTHLY_DOC_CAP": "1000"}),
     "chunking": ("processing", {"CHUNK_TARGET_CHARS": "1200", "CHUNK_MAX_CHARS": "1800", "CHUNK_OVERLAP_CHARS": "150"}),
     "embedding": ("processing", {}),
     "vector-indexing": ("indexing", {"BEDROCK_KNOWLEDGE_BASE_ID": "NEYHRDRGOT", "BEDROCK_DATA_SOURCE_ID": "FWC2ZGVLIT"}),

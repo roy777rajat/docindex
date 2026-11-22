@@ -138,6 +138,21 @@ services:
       - fromGroup: cleandocs-auth
       - fromGroup: cleandocs-aws-processing
   - type: web
+    name: cleandocs-enrichment-service
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./services/enrichment-service/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/live
+    autoDeploy: false
+    envVars:
+      - fromGroup: cleandocs-config
+      - fromGroup: cleandocs-auth
+      - fromGroup: cleandocs-aws-processing
+      - { key: AI_ENRICHMENT_ENABLED, value: "true" }
+      - { key: ENRICHMENT_MONTHLY_DOC_CAP, value: "1000" }
+  - type: web
     name: cleandocs-chunking-service
     runtime: docker
     plan: free

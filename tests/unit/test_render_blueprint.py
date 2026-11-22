@@ -27,7 +27,7 @@ def test_every_service_directory_is_deployed_and_has_a_dockerfile():
 
 
 def test_blueprint_services_are_free_docker_web_services_with_one_aws_tier_each():
-    assert len(BP["services"]) == 15
+    assert len(BP["services"]) == 16
     for svc in BP["services"]:
         assert svc["type"] == "web" and svc["runtime"] == "docker" and svc["plan"] == "free" and svc["autoDeploy"] is False
         assert svc["healthCheckPath"] == "/health/live" and svc["dockerContext"] == "."

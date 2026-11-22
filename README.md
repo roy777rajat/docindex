@@ -46,3 +46,6 @@ Want to run all services on one local port (8001) and test stage by stage with c
 
 ## Citations
 Indexed chunks carry citation provenance (document, filename, archive entry, pages, section). See [docs/citations.md](docs/citations.md).
+
+
+Code changes reach Render only by a manual deploy (autoDeploy is off): `.\scripts\deploy-render.ps1 [-Only <service>]` (needs RENDER_API_KEY), or Manual Deploy in the dashboard.

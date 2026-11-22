@@ -20,6 +20,25 @@ def iso(dt: datetime | None = None) -> str:
     return (dt or utcnow()).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
+DEFAULT_OWNER = "ADMIN"
+_OWNER_RE = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
+
+
+def normalize_owner(value: str | None) -> str:
+    """Owner label: empty -> ADMIN; 1-64 chars of A-Za-z0-9._@- ; ADMIN is reserved upper case; others lower-cased."""
+    v = (value or "").strip()
+    if not v:
+        return DEFAULT_OWNER
+    if not _OWNER_RE.match(v):
+        raise ValueError("owner must be 1-64 chars of A-Z a-z 0-9 . _ @ -")
+    return DEFAULT_OWNER if v.upper() == DEFAULT_OWNER else v.lower()
+
+
+def doc_owner(doc: dict) -> str:
+    """Owner of a registry document; rows created before owners existed belong to ADMIN."""
+    return doc.get("owner") or DEFAULT_OWNER
+
+
 def new_ingestion_id() -> str:
     return f"ing_{uuid.uuid4().hex}"
 

@@ -1,8 +1,8 @@
-"""One local server (default port 8001) that hosts all 15 CleanDocs services, each under its own path prefix.
+"""One local server (default port 8001) that hosts all 16 CleanDocs services, each under its own path prefix.
 
   http://127.0.0.1:8001/                       index of services and their URLs
   http://127.0.0.1:8001/upload/api/v1/uploads  upload-service
-  http://127.0.0.1:8001/validation/docs        Swagger page of validation-service  (every service has /<name>/docs)
+  http://127.0.0.1:8001/validation/health/ready  health of validation-service (every service has /<name>/health/ready)
 
 Real AWS with YOUR credentials. No Step Functions, no Render. Start: .\scripts\run_local.ps1   Stop: .\scripts\stop_local.ps1
 """
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVICES = ["upload", "validation", "archive", "manifest", "normalization", "cleaning", "duplicate", "extraction", "metadata",
+SERVICES = ["upload", "validation", "archive", "manifest", "normalization", "cleaning", "duplicate", "extraction", "metadata", "enrichment",
             "chunking", "embedding", "entity-extraction", "graph", "vector-indexing", "reconciliation"]
 SECRET = os.environ.get("SERVICE_AUTH_SECRET", "local-dev-secret-change-me-0123456789")
 
@@ -49,7 +49,7 @@ def build_app():
     @gw.get("/")
     def index():
         return {"auth_header": "Authorization: Bearer <SERVICE_AUTH_SECRET>",
-                "services": {s: {"base": f"/{s}", "swagger": f"/{s}/docs", "health": f"/{s}/health/ready"} for s in mounted}}
+                "services": {s: {"base": f"/{s}", "health": f"/{s}/health/ready"} for s in mounted}}
 
     return gw
 

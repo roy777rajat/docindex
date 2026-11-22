@@ -122,6 +122,16 @@ def _ocr_batch(deps: StageDeps, doc: dict[str, Any], ctx, env: dict[str, Any], i
                                result={"complete": False, "ocr_pages_done": len(done), "ocr_pages_remaining": remaining})
 
 
+LOW_OCR_CONFIDENCE = 80.0  # Textract confidence is 0-100; below this average the text is flagged as unreliable
+
+
+def _ocr_fields(summary: dict[str, Any]) -> dict[str, Any]:
+    conf = summary.get("avg_ocr_confidence")
+    if conf is None:
+        return {}
+    return {"avg_ocr_confidence": conf, "ocr_low_confidence": conf < LOW_OCR_CONFIDENCE}
+
+
 def run(deps: StageDeps, req: ProcessRequest) -> ProcessResponse:
     doc, ctx = load_document(deps, req.context)
     in_key = stage_key(ctx.document_id, "cleaned", "cleaned.json")
@@ -157,4 +167,5 @@ def run(deps: StageDeps, req: ProcessRequest) -> ProcessResponse:
         return data, summary, {"pages": len(data["pages"]), "chars": chars, "ocr_pages": ocr_done}
 
     return execute_stage(deps, ctx, doc=doc, version=VERSION, out_key=out_key(ctx.document_id), in_key=in_key,
-                         input_checksum=in_checksum, compute=compute, stage=DocumentStage.EXTRACTED.value)
+                         input_checksum=in_checksum, compute=compute, stage=DocumentStage.EXTRACTED.value,
+                         extra_doc_fields=_ocr_fields)

@@ -332,3 +332,22 @@ def test_request_validation_auth_and_configuration(env):
     r = TestClient(reconciliation.create_app(no_kb, deps), raise_server_exceptions=False).post(
         "/api/v1/process", headers=AUTH, json={"context": {"ingestion_id": "ing_1", "trace_id": "t"}})
     assert r.status_code == 422 and r.json()["error_code"] == "KB_NOT_CONFIGURED"
+
+
+def test_sidecar_owner_check_helper():
+    import json
+    from reconciliation_service.logic import _check_sidecars
+    class D:
+        pass
+    import reconciliation_service.logic as lg
+    store = {"k1": json.dumps({"metadataAttributes": {"document_id": "d", "chunk_id": "c", "owner": "bob", "doc_type": "x",
+                                                      "filename": "f", "ingestion_id": "i"}}).encode()}
+    orig = lg.read_object
+    lg.read_object = lambda deps, key: store.get(key)
+    try:
+        for owner, ok in (("bob", True), ("ADMIN", False)):
+            out = []
+            _check_sidecars(D(), {"owner": owner}, [{"metadata_s3_uri": "s3://b/k1"}], out)
+            assert {f.check: f.ok for f in out}["sidecar_owner_matches_registry"] is ok
+    finally:
+        lg.read_object = orig

@@ -27,7 +27,7 @@ HERE = Path(__file__).resolve().parent
 STATE = HERE.parent / ".local-state.json"
 BASE = os.environ.get("LOCAL_BASE", "http://127.0.0.1:8001")
 SECRET = os.environ.get("SERVICE_AUTH_SECRET", "local-dev-secret-change-me-0123456789")
-FILE_STAGES = ["normalization", "cleaning", "duplicate", "extraction", "metadata", "chunking", "embedding", "entity-extraction", "graph"]
+FILE_STAGES = ["normalization", "cleaning", "duplicate", "extraction", "metadata", "enrichment", "chunking", "embedding", "entity-extraction", "graph"]
 OPTIONAL = {"entity-extraction", "graph"}
 
 
@@ -77,20 +77,22 @@ def show(code: int, body: dict, label: str) -> bool:
     return ok
 
 
-def multipart(name: str, data: bytes) -> tuple[bytes, str]:
+def multipart(name: str, data: bytes, owner: str = "") -> tuple[bytes, str]:
     b = uuid.uuid4().hex
     ctype = {"pdf": "application/pdf", "txt": "text/plain", "csv": "text/csv", "png": "image/png", "jpg": "image/jpeg",
              "jpeg": "image/jpeg", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
              "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "zip": "application/zip"
              }.get(name.rsplit(".", 1)[-1].lower(), "application/octet-stream")
     body = (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: {ctype}\r\n\r\n').encode() \
-        + data + f'\r\n--{b}\r\nContent-Disposition: form-data; name="label"\r\n\r\nlocal-step\r\n--{b}--\r\n'.encode()
+        + data + f'\r\n--{b}\r\nContent-Disposition: form-data; name="label"\r\n\r\nlocal-step\r\n'.encode() \
+        + (f'--{b}\r\nContent-Disposition: form-data; name="owner"\r\n\r\n{owner}\r\n'.encode() if owner else b"") \
+        + f'--{b}--\r\n'.encode()
     return body, f"multipart/form-data; boundary={b}"
 
 
 def cmd_upload(a) -> int:
     p = Path(a.path)
-    body, ctype = multipart(p.name, p.read_bytes())
+    body, ctype = multipart(p.name, p.read_bytes(), a.owner)
     code, out = http("POST", "upload", "/api/v1/uploads", body, {"Content-Type": ctype, "Idempotency-Key": uuid.uuid4().hex})
     if code != 202:
         return 0 if show(code, out, "upload") else 1
@@ -236,7 +238,7 @@ def cmd_reset(a) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("upload"); s.add_argument("path"); s.set_defaults(fn=cmd_upload)
+    s = sub.add_parser("upload"); s.add_argument("path"); s.add_argument("--owner", default=""); s.set_defaults(fn=cmd_upload)
     for n, fn in (("validate", cmd_validate), ("archive", cmd_archive), ("manifest", cmd_manifest), ("status", cmd_status), ("reset", cmd_reset)):
         sub.add_parser(n).set_defaults(fn=fn)
     s = sub.add_parser("run"); s.add_argument("service", choices=FILE_STAGES); s.add_argument("--document"); s.set_defaults(fn=cmd_run)

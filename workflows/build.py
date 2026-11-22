@@ -15,7 +15,7 @@ from asl import file_workflow, ingestion_workflow  # noqa: E402
 from validate import validate  # noqa: E402
 
 SERVICES = ["validation", "archive", "manifest", "normalization", "cleaning", "duplicate", "extraction", "metadata",
-            "chunking", "embedding", "vector-indexing", "reconciliation", "entity-extraction", "graph"]
+            "enrichment", "chunking", "embedding", "vector-indexing", "reconciliation", "entity-extraction", "graph"]
 
 
 def urls_for(template: str) -> dict[str, str]:

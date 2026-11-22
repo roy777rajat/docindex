@@ -185,6 +185,29 @@ def _check_artifacts(run: Run, doc: dict[str, Any], out: list[Finding]) -> dict[
     return manifest
 
 
+REQUIRED_SIDECAR_KEYS = ("document_id", "chunk_id", "owner", "doc_type", "filename", "ingestion_id")
+
+
+def _check_sidecars(deps: Any, doc: dict[str, Any], chunks: list[dict[str, Any]], out: list[Finding]) -> None:
+    """Every sidecar must carry the registry owner (access control depends on it) and the required keys."""
+    want_owner = utils.doc_owner(doc)
+    wrong_owner = incomplete = 0
+    for c in chunks:
+        raw = read_object(deps, utils.parse_s3_uri(c["metadata_s3_uri"])[1])
+        try:
+            attrs = json.loads(raw)["metadataAttributes"] if raw else {}
+        except (ValueError, KeyError, TypeError):
+            attrs = {}
+        if attrs.get("owner") != want_owner:
+            wrong_owner += 1
+        if any(k not in attrs for k in REQUIRED_SIDECAR_KEYS):
+            incomplete += 1
+    out.append(Finding("sidecar_owner_matches_registry", not wrong_owner, "required",
+                       f"{wrong_owner} sidecar(s) have a different owner than the registry ({want_owner})" if wrong_owner else ""))
+    out.append(Finding("sidecar_attributes_present", not incomplete, "indexing",
+                       f"{incomplete} sidecar(s) miss required attributes" if incomplete else ""))
+
+
 def _check_chunks(run: Run, doc: dict[str, Any], manifest: dict[str, Any] | None, out: list[Finding]) -> None:
     deps, did = run.deps, doc["document_id"]
     if manifest is None:
@@ -209,6 +232,7 @@ def _check_chunks(run: Run, doc: dict[str, Any], manifest: dict[str, Any] | None
             if raw is None or utils.sha256_bytes(raw) != c["text_sha256"]:
                 bad += 1
         out.append(Finding("chunk_text_integrity", not bad, "required", f"{bad} chunk text(s) differ from the manifest" if bad else ""))
+    _check_sidecars(deps, doc, chunks, out)
     removed = 0
     if orphans and run.params.repair:
         for key in sorted(orphans):

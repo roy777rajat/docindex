@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     bedrock_data_source_id: str = ""
     embedding_model_id: str = "amazon.titan-embed-text-v2:0"
     classifier_model_id: str = ""
+    enrichment_model_id: str = "eu.amazon.nova-micro-v1:0"  # EU inference profile (on-demand ids are not offered in eu-west-1)
+    enrichment_monthly_doc_cap: int = 1000
 
     # limits (home-lab defaults; Render Free has 512 MB RAM)
     max_file_size_mb: int = 25

@@ -82,7 +82,7 @@ def test_request_bodies_conform_to_the_services_request_model(defs):
             ctx = {k[:-2]: sample[v] for k, v in body["context"].items()}
             ProcessRequest.model_validate({"context": ctx, "parameters": body["parameters"]})  # extra="forbid" would reject typos
             seen += 1
-    assert seen == 15   # + validation of each ZIP child, which the file workflow must run itself
+    assert seen == 16   # + validation of each ZIP child, which the file workflow must run itself
 
 
 def test_file_workflow_runs_stages_in_order_with_extraction_loop_and_duplicate_exit(defs):
@@ -97,7 +97,8 @@ def test_file_workflow_runs_stages_in_order_with_extraction_loop_and_duplicate_e
         name = st["Next"]
         if name in ("IsDuplicate", "ExtractionDone"):
             name = d[name]["Default"]
-    assert [o.lower() for o in order[:len(FILE_STAGES)]] == FILE_STAGES
+    expected = [x for st in FILE_STAGES for x in (["enrichment"] if st == "chunking" else []) + [st]]  # enrichment is a soft stage before chunking
+    assert [o.lower() for o in order[:len(expected)]] == expected
     assert d["ExtractionDone"]["Choices"][0]["Next"] == "Extraction"                         # resume the next OCR batch
     assert d["IsDuplicate"]["Choices"][0]["Next"] == "ReleaseGate"
     assert d["BusinessFailure"]["Next"] == "ReleaseGate"
